@@ -1,6 +1,6 @@
 const CACHE_NAME = 'gestor-tareas-v3-cache-v1.0'; // Versión actualizada
 const URLS_TO_CACHE = [
-    './Gestor de Tareas v3.html', // Nombre de archivo HTML corregido
+    './index.html', // Nombre de archivo HTML corregido
     './lucide.min.js',
     './icon-192x192.png', // Asegúrate de que estos iconos existan
     './icon-512x512.png', // Asegúrate de que estos iconos existan
