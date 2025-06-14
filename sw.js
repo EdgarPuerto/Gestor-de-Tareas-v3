@@ -59,30 +59,39 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
     event.respondWith(
-        caches.match(event.request)
-            .then(response => {
-                if (response) {
-                    return response; 
-                }
-                return fetch(event.request).then(
-                    fetchResponse => {
-                        if (!fetchResponse || fetchResponse.status !== 200 || (fetchResponse.type !== 'basic' && fetchResponse.type !== 'cors')) {
-                            return fetchResponse;
-                        }
-                        const responseToCache = fetchResponse.clone();
-                        caches.open(CACHE_NAME)
-                            .then(cache => {
-                                cache.put(event.request, responseToCache);
-                            });
-                        return fetchResponse;
+        caches.open(CACHE_NAME).then(async (cache) => {
+            // Intenta obtener la respuesta del caché primero
+            const cachedResponse = await cache.match(event.request);
+            if (cachedResponse) {
+                return cachedResponse;
+            }
+
+            // Si no está en caché, ve a la red
+            try {
+                const networkResponse = await fetch(event.request);
+                // Si la respuesta de red es válida, la cacheamos y la devolvemos
+                if (networkResponse && networkResponse.ok) {
+                    // Solo cachear peticiones GET y si no son opacas (para evitar errores con CDNs que no devuelven CORS headers para todo)
+                    // o si son de tu propio origen.
+                    if (event.request.method === 'GET' && (event.request.url.startsWith(self.location.origin) || networkResponse.type === 'cors')) {
+                       await cache.put(event.request, networkResponse.clone());
                     }
-                ).catch(err => {
-                    console.warn('Fetch failed; returning offline page or resource might be unavailable.', err);
-                    // Opcional: podrías devolver una página offline genérica aquí
-                    // if (event.request.mode === 'navigate') {
-                    //     return caches.match('./offline.html');
-                    // }
-                });
-            })
+                }
+                return networkResponse;
+            } catch (error) {
+                // La red falló.
+                console.warn('Network request failed, trying to serve fallback or nothing:', error);
+                // Si la petición es de navegación y falla, intenta servir index.html como fallback.
+                if (event.request.mode === 'navigate') {
+                    const indexFallback = await cache.match('./index.html'); // O la start_url
+                    if (indexFallback) return indexFallback;
+                }
+                // Si no es navegación o index.html no está en caché, la petición simplemente fallará
+                // (lo que lleva al error 404 si el navegador no puede obtener el recurso).
+                // Podrías devolver una respuesta de error genérica si quisieras:
+                // return new Response("Network error occurred", { status: 408, headers: { "Content-Type": "text/plain" } });
+                throw error; // Re-lanza el error si no hay fallback
+            }
+        })
     );
 });
