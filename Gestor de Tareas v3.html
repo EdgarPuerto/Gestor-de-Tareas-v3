@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Gestor de Tareas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- CAMBIO: Lucide local -->
+    <script src="lucide.min.js"></script>
+    <link rel="manifest" href="manifest.json">
+    <!-- Icono para iOS -->
+    <link rel="apple-touch-icon" href="icon-192x192.png">
+    <!-- Theme color para la barra de estado del navegador -->
+    <meta name="theme-color" content="#161B22">
+    
+    <style>
+        :root {
+            --background: #0D1117; --surface: #161B22; --border: #30363D;
+            --text-primary: #C9D1D9; --text-secondary: #8B949E; --accent: #2F81F7;
+        }
+        html, body, #root { height: 100%; overflow: hidden; }
+        body {
+            font-family: 'Inter', sans-serif; background-color: var(--background); color: var(--text-primary);
+            -webkit-tap-highlight-color: transparent;
+        }
+        #app-container {
+            display: flex; flex-direction: column; height: 100%;
+            max-width: 500px; margin: 0 auto; background-color: var(--background);
+        }
+        header { flex-shrink: 0; }
+        main { flex-grow: 1; overflow: hidden; position: relative; }
+        nav { flex-shrink: 0; }
+
+        .screen {
+            position: absolute; inset: 0; padding: 1.5rem; display: flex;
+            flex-direction: column; opacity: 0; transition: opacity 0.2s ease-in-out;
+            pointer-events: none;
+        }
+        .screen.active { opacity: 1; pointer-events: auto; }
+        .scrollable-content { flex-grow: 1; overflow-y: auto; padding-bottom: 1.5rem; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        input, select, textarea { background-color: var(--surface); border: 1px solid var(--border); }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+        input[type="date"]::-webkit-calendar-picker-indicator, input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1) brightness(0.8); cursor: pointer; }
+        .nav-button.active { background-color: var(--accent); color: white; }
+        .priority-button.active { transform: scale(1.05); box-shadow: 0 0 15px var(--shadow-color, rgba(255, 255, 255, 0.2)); border-width: 2px; }
+    </style>
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="root">
+        <div id="app-container">
+            <!-- Barra de Navegación Superior -->
+            <header class="p-3 bg-surface/80 backdrop-blur-lg border-b border-border flex-shrink-0">
+                <div id="top-nav" class="flex justify-around rounded-lg bg-surface p-1">
+                    <button data-action="navigate" data-screen="pending-screen" class="nav-button flex-1 py-2 px-3 text-sm font-semibold rounded-md transition-colors active">Pendientes</button>
+                    <button data-action="navigate" data-screen="add-task-screen" class="nav-button flex-1 py-2 px-3 text-sm font-semibold rounded-md transition-colors">Nueva Tarea</button>
+                    <button data-action="navigate" data-screen="completed-screen" class="nav-button flex-1 py-2 px-3 text-sm font-semibold rounded-md transition-colors">Completadas</button>
+                </div>
+            </header>
+
+            <!-- Contenedor Principal de Pantallas -->
+            <main>
+                <section id="pending-screen" class="screen active">
+                    <header class="flex items-center justify-between mb-4 flex-shrink-0"><div><h1 class="text-2xl font-bold text-white">Tareas Pendientes</h1><p id="pending-count-subtitle" class="text-text-secondary text-xs"></p></div><button data-action="show-settings" class="p-3 bg-surface rounded-xl border border-border hover:bg-border transition-colors"><i data-lucide="settings" class="w-5 h-5 text-gray-400 pointer-events-none"></i></button></header>
+                    <div class="relative mb-4 flex-shrink-0"><i data-lucide="search" class="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5"></i><input id="search-input" type="text" placeholder="Buscar..." class="w-full rounded-xl pl-12 pr-4 py-3 text-white placeholder-gray-500 text-base" /></div>
+                    <div id="category-tabs" class="mb-4 flex-shrink-0 flex gap-2 overflow-x-auto pb-2 scrollbar-hide"></div>
+                    <div id="task-list" class="scrollable-content space-y-3"></div>
+                </section>
+                <section id="add-task-screen" class="screen">
+                    <header class="mb-6 flex-shrink-0 flex items-center justify-between"><h1 class="text-2xl font-bold text-white">Nueva Tarea</h1><button id="submit-task-button" type="submit" form="add-task-form" disabled class="p-3 rounded-xl transition-colors bg-surface border border-border text-text-secondary disabled:cursor-not-allowed enabled:bg-accent enabled:text-white enabled:border-accent"><i data-lucide="plus-circle" class="w-6 h-6 pointer-events-none"></i></button></header>
+                    <form id="add-task-form" class="scrollable-content space-y-6">
+                        <div><label class="block text-sm font-medium text-text-secondary mb-2">Nombre</label><input name="title" required type="text" placeholder="Ej: Diseñar el prototipo de la app" class="w-full rounded-xl px-4 py-3 text-white placeholder-gray-500" /></div>
+                        <div><label class="block text-sm font-medium text-text-secondary mb-2">Descripción</label><textarea name="description" placeholder="Agrega detalles adicionales..." rows="3" class="w-full rounded-xl px-4 py-3 text-white placeholder-gray-500 resize-none"></textarea></div>
+                        <div><label class="block text-sm font-medium text-text-secondary mb-2">Prioridad</label><div id="priority-selector" class="flex justify-between gap-3"></div><input type="hidden" name="priority" value="medium"></div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div><label class="block text-sm font-medium text-text-secondary mb-2">Categoría</label><select name="category" required class="w-full rounded-xl px-4 py-3 text-white"></select></div>
+                            <div><label class="block text-sm font-medium text-text-secondary mb-2">Tiempo (min)</label><input name="estimatedTime" type="number" value="30" required min="5" step="5" class="w-full rounded-xl px-4 py-3 text-white" /></div>
+                            <div><label class="block text-sm font-medium text-text-secondary mb-2">Fecha Límite</label><input name="dueDate" required type="date" class="w-full rounded-xl px-4 py-3 text-white" /></div>
+                            <div><label class="block text-sm font-medium text-text-secondary mb-2">Hora</label><input name="time" required type="time" class="w-full rounded-xl px-4 py-3 text-white" /></div>
+                        </div>
+                    </form>
+                </section>
+                <section id="completed-screen" class="screen">
+                     <header class="mb-4 flex-shrink-0"><h1 class="text-2xl font-bold text-white">Tareas Completadas</h1><p id="completed-count-subtitle" class="text-text-secondary text-xs"></p></header>
+                    <div id="completed-task-list" class="scrollable-content space-y-3"></div>
+                </section>
+            </main>
+        </div>
+        <div id="settings-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+            <div class="bg-surface rounded-2xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col border border-border shadow-2xl">
+                <header class="p-4 border-b border-border flex items-center justify-between flex-shrink-0"><h2 class="text-lg font-bold text-white">Gestionar Categorías</h2><button data-action="close-settings" class="p-2 hover:bg-border rounded-full transition-colors"><i data-lucide="x" class="w-5 h-5 text-text-secondary pointer-events-none"></i></button></header>
+                <div class="p-4 flex-shrink-0"><form id="add-category-form" class="flex gap-2"><input name="categoryName" type="text" placeholder="Nueva categoría" required class="flex-1 rounded-lg px-4 py-3 text-white placeholder-gray-500" /><button type="submit" class="bg-accent hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"><i data-lucide="plus" class="w-5 h-5 pointer-events-none"></i></button></form></div>
+                <div id="category-management-list" class="p-4 pt-0 space-y-2 overflow-y-auto"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+    (() => {
+        'use strict';
+        // Claves para localStorage
+        const TASKS_STORAGE_KEY = 'gestor_tasks_v2.1'; // Incrementa versión si cambias estructura de datos
+        const CATEGORIES_STORAGE_KEY = 'gestor_categories_v2.1';
+
+        let state = { 
+            tasks: [], 
+            categories: ['Personal', 'Trabajo', 'Hogar', 'Estudios'], 
+            activeScreen: 'pending-screen', 
+            activeCategory: 'Todas', 
+            searchTerm: '' 
+        };
+
+        const dom = {
+            appContainer: document.getElementById('app-container'), screens: document.querySelectorAll('.screen'), topNav: document.getElementById('top-nav'),
+            taskList: document.getElementById('task-list'), completedTaskList: document.getElementById('completed-task-list'),
+            categoryTabs: document.getElementById('category-tabs'), addTaskForm: document.getElementById('add-task-form'),
+            searchInput: document.getElementById('search-input'), settingsModal: document.getElementById('settings-modal'),
+            addCategoryForm: document.getElementById('add-category-form'), categoryManagementList: document.getElementById('category-management-list'),
+            prioritySelector: document.getElementById('priority-selector'), pendingCountSubtitle: document.getElementById('pending-count-subtitle'),
+            completedCountSubtitle: document.getElementById('completed-count-subtitle'),
+            submitTaskButton: document.getElementById('submit-task-button'),
+        };
+
+        const saveState = () => { 
+            try {
+                localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(state.tasks)); 
+                localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(state.categories)); 
+            } catch (e) { 
+                console.error("Error al guardar estado en localStorage:", e); 
+                 // Podrías notificar al usuario aquí si el localStorage está lleno o no disponible
+            }
+        };
+
+        const loadState = () => { 
+            try { 
+                const storedTasks = localStorage.getItem(TASKS_STORAGE_KEY);
+                const storedCategories = localStorage.getItem(CATEGORIES_STORAGE_KEY);
+                
+                state.tasks = storedTasks ? JSON.parse(storedTasks) : []; 
+                state.categories = storedCategories ? JSON.parse(storedCategories) : ['Personal', 'Trabajo', 'Hogar', 'Estudios'];
+                if (!state.categories || state.categories.length === 0) { // Asegurar que siempre haya categorías
+                    state.categories = ['Personal', 'Trabajo', 'Hogar', 'Estudios'];
+                }
+
+            } catch (e) { 
+                console.error("Error al cargar estado desde localStorage:", e); 
+                // Reset a valores por defecto si hay error de parseo
+                state.tasks = []; 
+                state.categories = ['Personal', 'Trabajo', 'Hogar', 'Estudios']; 
+            }
+        };
+
+        // Renderizado general, ahora incluye la llamada a lucide.createIcons()
+        const render = () => { 
+            renderTasks(); 
+            renderCategories(); 
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons(); 
+            } else {
+                console.warn('Lucide no está definido. Los iconos no se renderizarán.');
+            }
+        };
+
+        const renderTasks = () => {
+            const getPriorityStyling = (p) => ({'high':'text-red-400 bg-red-400/10 border-red-400/20','medium':'text-yellow-400 bg-yellow-400/10 border-yellow-400/20','low':'text-green-400 bg-green-400/10 border-green-400/20'}[p] || 'text-gray-400 bg-gray-400/10 border-gray-400/20');
+            const formatTime = (m) => {
+                if (isNaN(parseInt(m))) return 'N/A';
+                const minutes = parseInt(m);
+                return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+            }
+            const filtered = state.tasks.filter(t => 
+                (state.activeCategory === 'Todas' || t.category === state.activeCategory) &&
+                (t.title.toLowerCase().includes(state.searchTerm) || (t.description && t.description.toLowerCase().includes(state.searchTerm)))
+            );
+            const pendingTasks = filtered.filter(t => t.status === 'pending').sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt)); // Ordenar por creación
+            const completedTasks = state.tasks.filter(t => t.status === 'completed').sort((a,b) => new Date(b.completedAt) - new Date(a.completedAt)); // Ordenar por completado (más reciente primero)
+            
+            dom.pendingCountSubtitle.textContent = `${pendingTasks.length} ${pendingTasks.length === 1 ? 'tarea' : 'tareas'}`;
+            dom.completedCountSubtitle.textContent = `${completedTasks.length} ${completedTasks.length === 1 ? 'tarea realizada' : 'tareas realizadas'}`;
+            
+            const taskHTML = (t) => `<div class="bg-surface rounded-2xl p-4 border border-border">
+                <div class="flex items-start gap-4">
+                    <button data-action="complete-task" data-id="${t.id}" class="mt-1 p-2 bg-green-500/20 hover:bg-green-500 text-green-400 hover:text-white rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-green-500">
+                        <i data-lucide="check" class="w-5 h-5 pointer-events-none"></i>
+                    </button>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="font-semibold text-white mb-1 text-base">${t.title}</h3>
+                        ${t.description ? `<p class="text-text-secondary text-sm mb-3 line-clamp-2">${t.description}</p>` : ''}
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <span class="px-2 py-1 rounded-md text-xs font-semibold border ${getPriorityStyling(t.priority)}">${t.priority.charAt(0).toUpperCase() + t.priority.slice(1)}</span>
+                            <span class="text-text-secondary text-xs bg-gray-700/50 px-2 py-1 rounded-md">${t.category}</span>
+                            <div class="flex items-center text-text-secondary text-xs">
+                                <i data-lucide="clock" class="w-3 h-3 mr-1.5"></i>${formatTime(t.estimatedTime)}
+                            </div>
+                            ${t.dueDate ? `<div class="flex items-center text-text-secondary text-xs"><i data-lucide="calendar" class="w-3 h-3 mr-1.5"></i>${new Date(t.dueDate+'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} ${t.time || ''}</div>` : ''}
+                        </div>
+                    </div>
+                    <button data-action="delete-task" data-id="${t.id}" class="mt-1 p-2 bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-500">
+                        <i data-lucide="trash-2" class="w-5 h-5 pointer-events-none"></i>
+                    </button>
+                </div>
+            </div>`;
+            
+            const completedTaskHTML = (t) => `<div class="bg-surface rounded-2xl p-4 border border-border/50 opacity-60">
+                <div class="flex items-center gap-4">
+                    <i data-lucide="check-circle-2" class="w-6 h-6 text-green-500 flex-shrink-0"></i>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="font-semibold text-gray-300 line-through">${t.title}</h3>
+                        <p class="text-gray-500 text-xs">Completada el ${new Date(t.completedAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                    </div>
+                    <button data-action="delete-task" data-id="${t.id}" class="p-2 text-red-500/50 hover:text-red-400 transition-colors flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-red-500">
+                        <i data-lucide="trash-2" class="w-5 h-5 pointer-events-none"></i>
+                    </button>
+                </div>
+            </div>`;
+            
+            const emptyStateHTML = (icon, title, subtitle) => `<div class="text-center pt-12"><div class="w-16 h-16 bg-surface rounded-full flex items-center justify-center mx-auto mb-4"><i data-lucide="${icon}" class="w-8 h-8 text-gray-500"></i></div><h3 class="text-lg font-semibold text-text-primary mb-2">${title}</h3><p class="text-text-secondary text-sm">${subtitle}</p></div>`;
+            
+            dom.taskList.innerHTML = pendingTasks.length > 0 ? pendingTasks.map(taskHTML).join('') : emptyStateHTML('check-check', '¡Todo listo!', 'No hay tareas pendientes.');
+            dom.completedTaskList.innerHTML = completedTasks.length > 0 ? completedTasks.map(completedTaskHTML).join('') : emptyStateHTML('archive', 'Aún no hay logros', 'Completa una tarea para verla aquí.');
+        };
+
+        const renderCategories = () => {
+            const categoriesToDisplay = ['Todas', ...state.categories];
+            dom.categoryTabs.innerHTML = categoriesToDisplay.map(c => `<button data-action="filter-category" data-category="${c}" class="px-4 py-2 rounded-full font-medium transition-all duration-200 whitespace-nowrap flex-shrink-0 text-sm ${state.activeCategory === c ? 'bg-accent text-white shadow-lg shadow-blue-500/25' : 'bg-surface text-gray-300 border border-border'}">${c}</button>`).join('');
+            
+            const categorySelect = dom.addTaskForm.querySelector('select[name="category"]');
+            if (categorySelect) {
+                 categorySelect.innerHTML = state.categories.map(c => `<option value="${c}">${c}</option>`).join('');
+                 if(state.categories.length > 0 && !categorySelect.value) { // si no hay valor seleccionado y hay categorias, seleccionar la primera
+                    categorySelect.value = state.categories[0];
+                 }
+            }
+
+            dom.categoryManagementList.innerHTML = state.categories.map(c => `<div class="flex items-center justify-between bg-background rounded-lg p-3"><span class="text-white font-medium">${c}</span>${state.categories.length > 1 ? `<button data-action="delete-category" data-category="${c}" class="text-red-500 hover:text-red-400 p-1 rounded transition-colors"><i data-lucide="trash-2" class="w-4 h-4 pointer-events-none"></i></button>` : ''}</div>`).join('');
+        };
+
+        const renderPrioritySelector = () => {
+            const getPriorityStyling = (p) => ({'high': {shadow: 'rgba(239, 68, 68, 0.4)' },'medium': {shadow: 'rgba(234, 179, 8, 0.4)' },'low': {shadow: 'rgba(34, 197, 94, 0.4)' }}[p]);
+            dom.prioritySelector.innerHTML = [{ id: 'high', label: 'Alta', icon: 'flame' },{ id: 'medium', label: 'Media', icon: 'bar-chart-2' },{ id: 'low', label: 'Baja', icon: 'chevrons-down' }].map(({id, label, icon}) => `<button type="button" data-action="select-priority" data-priority="${id}" class="priority-button flex-1 py-3 px-2 rounded-xl flex flex-col items-center gap-1.5 border transition-all duration-200 border-border text-text-secondary bg-surface" style="--shadow-color: ${getPriorityStyling(id).shadow}"><i data-lucide="${icon}" class="w-5 h-5 pointer-events-none"></i><span class="text-xs font-semibold pointer-events-none">${label}</span></button>`).join('');
+            updatePrioritySelection(dom.addTaskForm.querySelector('input[name="priority"]').value || 'medium');
+        };
+
+        const updatePrioritySelection = (priority) => {
+            dom.addTaskForm.querySelector('input[name="priority"]').value = priority;
+            dom.prioritySelector.querySelectorAll('.priority-button').forEach(btn => {
+                const btnPriority = btn.dataset.priority;
+                const isActive = btnPriority === priority;
+                btn.classList.toggle('active', isActive);
+                // Clases específicas de color del borde y texto para el botón activo
+                btn.classList.toggle('border-red-500', isActive && btnPriority === 'high');
+                btn.classList.toggle('text-red-300', isActive && btnPriority === 'high');
+                btn.classList.toggle('border-yellow-500', isActive && btnPriority === 'medium');
+                btn.classList.toggle('text-yellow-300', isActive && btnPriority === 'medium');
+                btn.classList.toggle('border-green-500', isActive && btnPriority === 'low');
+                btn.classList.toggle('text-green-300', isActive && btnPriority === 'low');
+                // Quitar clases de otros si no están activas
+                if (!isActive) {
+                    ['border-red-500', 'text-red-300', 'border-yellow-500', 'text-yellow-300', 'border-green-500', 'text-green-300'].forEach(cls => btn.classList.remove(cls));
+                }
+            });
+        };
+
+        const handleAction = (e) => {
+            const target = e.target.closest('[data-action]');
+            if (!target) return;
+            const { action, id, category, priority, screen } = target.dataset;
+
+            switch(action) {
+                case 'navigate': 
+                    state.activeScreen = screen; 
+                    dom.screens.forEach(s => s.classList.toggle('active', s.id === screen)); 
+                    dom.topNav.querySelectorAll('.nav-button').forEach(b => b.classList.toggle('active', b.dataset.screen === screen)); 
+                    // Si navegamos a la pantalla de añadir tarea, reseteamos el selector de prioridad y fecha/hora por si acaso
+                    if (screen === 'add-task-screen') {
+                        setDefaultFormValues();
+                        updatePrioritySelection('medium'); 
+                        dom.submitTaskButton.disabled = !dom.addTaskForm.checkValidity();
+                    }
+                    break;
+                case 'show-settings': dom.settingsModal.classList.remove('hidden'); break;
+                case 'close-settings': dom.settingsModal.classList.add('hidden'); break;
+                case 'filter-category': state.activeCategory = category; render(); break; // Solo render, lucide se llama dentro
+                case 'select-priority': updatePrioritySelection(priority); break;
+                case 'delete-category':
+                    if (state.categories.length > 1) {
+                        const oldCategory = category;
+                        const newCategories = state.categories.filter(c => c !== oldCategory); 
+                        const fallbackCategory = newCategories.length > 0 ? newCategories[0] : 'General'; // Nueva categoría por defecto si se borra la única
+                        
+                        state.tasks = state.tasks.map(t => t.category === oldCategory ? {...t, category: fallbackCategory} : t);
+                        state.categories = newCategories;
+                        if (state.categories.length === 0) { // Si todas las categorías fueron borradas, añadir una por defecto.
+                             state.categories.push('General');
+                             if(dom.addTaskForm.querySelector('select[name="category"]')) {
+                                dom.addTaskForm.querySelector('select[name="category"]').value = 'General';
+                             }
+                        }
+
+                        if (state.activeCategory === oldCategory) {
+                             state.activeCategory = state.categories.includes(fallbackCategory) ? fallbackCategory : 'Todas';
+                        }
+                        saveState(); render();
+                    } else {
+                        // Podrías mostrar una alerta de que no se puede borrar la última categoría
+                        console.warn("No se puede eliminar la última categoría.");
+                    }
+                    break;
+                case 'complete-task': 
+                    state.tasks = state.tasks.map(t => t.id == id ? { ...t, status: 'completed', completedAt: new Date().toISOString() } : t); 
+                    saveState(); render(); 
+                    break;
+                case 'delete-task': 
+                    state.tasks = state.tasks.filter(t => t.id != id); 
+                    saveState(); render(); 
+                    break;
+            }
+        };
+        
+        const setDefaultFormValues = () => {
+            dom.addTaskForm.elements.dueDate.value = new Date().toISOString().split('T')[0];
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            dom.addTaskForm.elements.time.value = `${hours}:${minutes}`;
+            dom.addTaskForm.elements.estimatedTime.value = 30; // Valor por defecto para tiempo estimado
+            if(state.categories.length > 0 && dom.addTaskForm.elements.category) {
+                 dom.addTaskForm.elements.category.value = state.categories[0];
+            }
+        };
+
+        const init = () => {
+            loadState();
+            setDefaultFormValues();
+            
+            document.body.addEventListener('click', handleAction);
+            dom.searchInput.addEventListener('input', (e) => { state.searchTerm = e.target.value.toLowerCase(); render(); }); // render() ahora llama a lucide
+            
+            dom.addCategoryForm.addEventListener('submit', (e) => { 
+                e.preventDefault(); 
+                const newCategoryNameInput = e.target.elements.categoryName;
+                const newCategoryName = newCategoryNameInput.value.trim(); 
+                if (newCategoryName && !state.categories.includes(newCategoryName)) { 
+                    state.categories.push(newCategoryName); 
+                    saveState(); 
+                    renderCategories(); // Solo renderizar categorías
+                    if (typeof lucide !== 'undefined') lucide.createIcons(); // Y luego los iconos
+                    e.target.reset(); 
+                } else if (state.categories.includes(newCategoryName)) {
+                    alert("Esa categoría ya existe."); // Feedback al usuario
+                    newCategoryNameInput.focus();
+                }
+            });
+            
+            dom.addTaskForm.addEventListener('input', () => { dom.submitTaskButton.disabled = !dom.addTaskForm.checkValidity(); });
+            dom.addTaskForm.addEventListener('submit', (e) => {
+                e.preventDefault(); 
+                if (!dom.addTaskForm.checkValidity()) {
+                    // Podrías añadir un feedback visual de campos inválidos
+                    return;
+                }
+                const formData = new FormData(e.target); 
+                const newTask = { 
+                    id: Date.now(), // Usar Date.now() es simple pero puede colisionar si se crean tareas muy rápido. Para apps más robustas, usar UUID.
+                    status: 'pending', 
+                    createdAt: new Date().toISOString() 
+                };
+                for (let [key, value] of formData.entries()) { 
+                    newTask[key] = value.trim(); // Trim para evitar espacios
+                }
+                // Convertir estimatedTime a número
+                if (newTask.estimatedTime) {
+                    newTask.estimatedTime = parseInt(newTask.estimatedTime, 10);
+                }
+
+                state.tasks.push(newTask); 
+                saveState(); 
+                e.target.reset();
+                setDefaultFormValues(); // Resetear a valores por defecto después de enviar
+                dom.submitTaskButton.disabled = true; 
+                updatePrioritySelection('medium'); // Resetear prioridad visualmente
+                
+                // Navegar a la pantalla de pendientes
+                const pendingScreenButton = document.querySelector('[data-action="navigate"][data-screen="pending-screen"]');
+                if (pendingScreenButton) pendingScreenButton.click();
+                
+                render(); // render() ahora llama a lucide
+            });
+            
+            renderPrioritySelector(); 
+            render(); // Renderizado inicial
+             // Registrar Service Worker
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('./sw.js')
+                        .then(registration => {
+                            console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                        })
+                        .catch(error => {
+                            console.log('ServiceWorker registration failed: ', error);
+                        });
+                });
+            }
+        };
+
+        init();
+    })();
+</script>
+</body>
+</html>
