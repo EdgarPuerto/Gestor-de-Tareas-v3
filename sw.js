@@ -1,9 +1,10 @@
-const CACHE_NAME = 'gestor-tareas-v3-cache-v1.0'; // Versión actualizada
+const CACHE_NAME = 'gestor-tareas-v3.1'; //
+
 const URLS_TO_CACHE = [
-    './index.html', // Nombre de archivo HTML corregido
+    './index.html', 
     './lucide.min.js',
-    './icon-192x192.png', // Asegúrate de que estos iconos existan
-    './icon-512x512.png', // Asegúrate de que estos iconos existan
+    './icon-192x192.png',
+    './icon-512x512.png',
     './manifest.json',
     'https://cdn.tailwindcss.com',
     'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
@@ -15,28 +16,24 @@ self.addEventListener('install', event => {
         caches.open(CACHE_NAME)
             .then(cache => {
                 console.log('Opened cache and caching initial assets');
-                // Usar { mode: 'cors' } para recursos de terceros si es necesario, aunque para los listados aquí puede que no sea estrictamente necesario si se sirven con CORS headers adecuados.
-                // Para CDNs como tailwind y google fonts, el navegador maneja CORS. Para tus propios assets, no es problema.
                 const cachePromises = URLS_TO_CACHE.map(urlToCache => {
-                    const request = new Request(urlToCache, {mode: 'cors'}); // mode: 'cors' es buena práctica para CDNs
+                    const request = new Request(urlToCache, {mode: 'cors'});
                     return fetch(request).then(response => {
                         if (!response.ok) {
-                            // Si la respuesta no es OK (e.g. 404), no intentes cachearla y lanza un error
-                            // o simplemente sáltala para no romper la instalación del SW.
                             console.error(`Failed to fetch ${urlToCache}: ${response.status}`);
-                            return Promise.resolve(); // Resuelve para no bloquear el Promise.all
+                            return Promise.resolve(); 
                         }
                         return cache.put(request, response);
                     }).catch(err => {
                         console.error(`Skipping ${urlToCache} due to fetch error: ${err}`);
-                        return Promise.resolve(); // Resuelve para no bloquear el Promise.all
+                        return Promise.resolve(); 
                     });
                 });
                 return Promise.all(cachePromises);
             })
-            .then(() => console.log('All initial assets cached successfully.'))
+            .then(() => console.log('All initial assets cached successfully or skipped due to error.'))
             .catch(err => {
-                console.error('Failed to cache one or more initial assets:', err);
+                console.error('Failed to cache one or more initial assets during install:', err);
             })
     );
 });
@@ -52,45 +49,69 @@ self.addEventListener('activate', event => {
                     }
                 })
             );
+        }).then(() => {
+            console.log('Service Worker activated and old caches cleaned.');
+            return self.clients.claim();
         })
     );
-    return self.clients.claim();
 });
 
 self.addEventListener('fetch', event => {
     event.respondWith(
         caches.open(CACHE_NAME).then(async (cache) => {
-            // Intenta obtener la respuesta del caché primero
             const cachedResponse = await cache.match(event.request);
             if (cachedResponse) {
                 return cachedResponse;
             }
-
-            // Si no está en caché, ve a la red
             try {
                 const networkResponse = await fetch(event.request);
-                // Si la respuesta de red es válida, la cacheamos y la devolvemos
                 if (networkResponse && networkResponse.ok) {
-                    // Solo cachear peticiones GET y si no son opacas (para evitar errores con CDNs que no devuelven CORS headers para todo)
-                    // o si son de tu propio origen.
                     if (event.request.method === 'GET' && (event.request.url.startsWith(self.location.origin) || networkResponse.type === 'cors')) {
                        await cache.put(event.request, networkResponse.clone());
                     }
                 }
                 return networkResponse;
             } catch (error) {
-                // La red falló.
-                console.warn('Network request failed, trying to serve fallback or nothing:', error);
-                // Si la petición es de navegación y falla, intenta servir index.html como fallback.
+                console.warn('Network request failed for:', event.request.url, error);
                 if (event.request.mode === 'navigate') {
-                    const indexFallback = await cache.match('./index.html'); // O la start_url
+                    const indexFallback = await cache.match('./index.html');
                     if (indexFallback) return indexFallback;
                 }
-                // Si no es navegación o index.html no está en caché, la petición simplemente fallará
-                // (lo que lleva al error 404 si el navegador no puede obtener el recurso).
-                // Podrías devolver una respuesta de error genérica si quisieras:
-                // return new Response("Network error occurred", { status: 408, headers: { "Content-Type": "text/plain" } });
-                throw error; // Re-lanza el error si no hay fallback
+                return new Response('', {status: 404, statusText: 'Not Found'});
+            }
+        })
+    );
+});
+
+self.addEventListener('message', event => {
+    if (event.data && event.data.type === 'SCHEDULE_NOTIFICATION') {
+        const task = event.data.task;
+        console.log('Service Worker: Received SCHEDULE_NOTIFICATION for:', task.title);
+        event.waitUntil(
+            self.registration.showNotification(`Recordatorio: ${task.title}`, {
+                body: task.description || '¡Es hora de tu tarea!',
+                icon: task.icon || './icon-192x192.png',
+                tag: `task-alarm-${task.id}`,
+                data: { taskId: task.id, url: './index.html' } // Añadir URL para abrir
+            })
+        );
+    }
+});
+
+self.addEventListener('notificationclick', event => {
+    event.notification.close();
+    const urlToOpen = event.notification.data && event.notification.data.url ? event.notification.data.url : './index.html';
+
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
+            for (let i = 0; i < windowClients.length; i++) {
+                const client = windowClients[i];
+                if (client.url.endsWith(urlToOpen.substring(1)) && 'focus' in client) { // Comparar con la parte final de la URL
+                    return client.focus();
+                }
+            }
+            if (clients.openWindow) {
+                return clients.openWindow(urlToOpen);
             }
         })
     );

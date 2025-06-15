@@ -5,18 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Gestor de Tareas</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- CAMBIO: Lucide local -->
     <script src="lucide.min.js"></script>
     <link rel="manifest" href="manifest.json">
-    <!-- Icono para iOS -->
     <link rel="apple-touch-icon" href="icon-192x192.png">
-    <!-- Theme color para la barra de estado del navegador -->
     <meta name="theme-color" content="#161B22">
     
     <style>
         :root {
             --background: #0D1117; --surface: #161B22; --border: #30363D;
             --text-primary: #C9D1D9; --text-secondary: #8B949E; --accent: #2F81F7;
+            --shadow-color-high: rgba(239, 68, 68, 0.3);
+            --shadow-color-medium: rgba(234, 179, 8, 0.3);
+            --shadow-color-low: rgba(34, 197, 94, 0.3);
         }
         html, body, #root { height: 100%; overflow: hidden; }
         body {
@@ -29,7 +29,6 @@
         }
         header { flex-shrink: 0; }
         main { flex-grow: 1; overflow: hidden; position: relative; }
-        nav { flex-shrink: 0; }
 
         .screen {
             position: absolute; inset: 0; padding: 1.5rem; display: flex;
@@ -41,11 +40,25 @@
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
         
-        input, select, textarea { background-color: var(--surface); border: 1px solid var(--border); }
+        input, select, textarea { background-color: var(--surface); border: 1px solid var(--border); color: var(--text-primary); }
         input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
-        input[type="date"]::-webkit-calendar-picker-indicator, input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1) brightness(0.8); cursor: pointer; }
+        input[type="date"]::-webkit-calendar-picker-indicator, 
+        input[type="time"]::-webkit-calendar-picker-indicator { 
+            filter: invert(1) brightness(0.8); cursor: pointer; 
+        }
         .nav-button.active { background-color: var(--accent); color: white; }
-        .priority-button.active { transform: scale(1.05); box-shadow: 0 0 15px var(--shadow-color, rgba(255, 255, 255, 0.2)); border-width: 2px; }
+        .priority-button.active { 
+            transform: scale(1.05); 
+            box-shadow: 0 0 10px var(--shadow-color);
+            border-width: 2px; 
+        }
+        #filter-menu {
+            background-color: var(--surface); 
+        }
+        #filter-menu button.active-sort, #filter-menu button.active-priority-filter {
+            background-color: var(--accent);
+            color: white;
+        }
     </style>
      <link rel="preconnect" href="https://fonts.googleapis.com">
      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -54,7 +67,6 @@
 <body>
     <div id="root">
         <div id="app-container">
-            <!-- Barra de Navegación Superior -->
             <header class="p-3 bg-surface/80 backdrop-blur-lg border-b border-border flex-shrink-0">
                 <div id="top-nav" class="flex justify-around rounded-lg bg-surface p-1">
                     <button data-action="navigate" data-screen="pending-screen" class="nav-button flex-1 py-2 px-3 text-sm font-semibold rounded-md transition-colors active">Pendientes</button>
@@ -63,30 +75,90 @@
                 </div>
             </header>
 
-            <!-- Contenedor Principal de Pantallas -->
             <main>
                 <section id="pending-screen" class="screen active">
-                    <header class="flex items-center justify-between mb-4 flex-shrink-0"><div><h1 class="text-2xl font-bold text-white">Tareas Pendientes</h1><p id="pending-count-subtitle" class="text-text-secondary text-xs"></p></div><button data-action="show-settings" class="p-3 bg-surface rounded-xl border border-border hover:bg-border transition-colors"><i data-lucide="settings" class="w-5 h-5 text-gray-400 pointer-events-none"></i></button></header>
-                    <div class="relative mb-4 flex-shrink-0"><i data-lucide="search" class="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5"></i><input id="search-input" type="text" placeholder="Buscar..." class="w-full rounded-xl pl-12 pr-4 py-3 text-white placeholder-gray-500 text-base" /></div>
+                    <header class="flex items-center justify-between mb-4 flex-shrink-0">
+                        <div>
+                            <h1 class="text-2xl font-bold text-white">Tareas Pendientes</h1>
+                            <p id="pending-count-subtitle" class="text-text-secondary text-xs"></p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="relative">
+                                <button data-action="toggle-filter-menu" class="p-3 bg-surface rounded-xl border border-border hover:bg-border transition-colors">
+                                    <i data-lucide="filter" class="w-5 h-5 text-gray-400 pointer-events-none"></i>
+                                </button>
+                                <div id="filter-menu" class="hidden absolute right-0 mt-2 w-56 bg-surface rounded-lg shadow-xl border border-border z-10 p-2 space-y-1">
+                                    <p class="px-2 py-1 text-xs text-text-secondary font-medium">Ordenar por:</p>
+                                    <button data-action="sort-tasks" data-sort="createdAt" class="w-full text-left px-3 py-2 text-sm rounded hover:bg-border transition-colors text-white">Creación</button>
+                                    <button data-action="sort-tasks" data-sort="dueDate" class="w-full text-left px-3 py-2 text-sm rounded hover:bg-border transition-colors text-white">Fecha Límite</button>
+                                    <button data-action="sort-tasks" data-sort="priorityOrder" class="w-full text-left px-3 py-2 text-sm rounded hover:bg-border transition-colors text-white">Prioridad</button>
+                                    <button data-action="sort-tasks" data-sort="title" class="w-full text-left px-3 py-2 text-sm rounded hover:bg-border transition-colors text-white">Nombre (A-Z)</button>
+                                    <div class="border-t border-border my-1"></div>
+                                    <p class="px-2 py-1 text-xs text-text-secondary font-medium">Filtrar Prioridad:</p>
+                                    <button data-action="filter-priority" data-priority-filter="Todas" class="w-full text-left px-3 py-2 text-sm rounded hover:bg-border transition-colors text-white">Todas</button>
+                                    <button data-action="filter-priority" data-priority-filter="high" class="w-full text-left px-3 py-2 text-sm rounded hover:bg-border transition-colors text-red-400">Alta</button>
+                                    <button data-action="filter-priority" data-priority-filter="medium" class="w-full text-left px-3 py-2 text-sm rounded hover:bg-border transition-colors text-yellow-400">Media</button>
+                                    <button data-action="filter-priority" data-priority-filter="low" class="w-full text-left px-3 py-2 text-sm rounded hover:bg-border transition-colors text-green-400">Baja</button>
+                                </div>
+                            </div>
+                            <button data-action="show-settings" class="p-3 bg-surface rounded-xl border border-border hover:bg-border transition-colors">
+                                <i data-lucide="settings" class="w-5 h-5 text-gray-400 pointer-events-none"></i>
+                            </button>
+                        </div>
+                    </header>
+                    <div class="relative mb-4 flex-shrink-0">
+                        <i data-lucide="search" class="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5"></i>
+                        <input id="search-input" type="text" placeholder="Buscar tareas..." class="w-full rounded-xl pl-12 pr-4 py-3 placeholder-gray-500 text-base" />
+                    </div>
                     <div id="category-tabs" class="mb-4 flex-shrink-0 flex gap-2 overflow-x-auto pb-2 scrollbar-hide"></div>
                     <div id="task-list" class="scrollable-content space-y-3"></div>
                 </section>
+
                 <section id="add-task-screen" class="screen">
-                    <header class="mb-6 flex-shrink-0 flex items-center justify-between"><h1 class="text-2xl font-bold text-white">Nueva Tarea</h1><button id="submit-task-button" type="submit" form="add-task-form" disabled class="p-3 rounded-xl transition-colors bg-surface border border-border text-text-secondary disabled:cursor-not-allowed enabled:bg-accent enabled:text-white enabled:border-accent"><i data-lucide="plus-circle" class="w-6 h-6 pointer-events-none"></i></button></header>
+                     <header class="mb-6 flex-shrink-0 flex items-center justify-between">
+                        <h1 class="text-2xl font-bold text-white">Nueva Tarea</h1> 
+                        <button id="submit-task-button" type="submit" form="add-task-form" disabled 
+                                class="p-3 rounded-xl transition-colors bg-surface border border-border text-text-secondary 
+                                       disabled:opacity-50 disabled:cursor-not-allowed 
+                                       enabled:bg-accent enabled:text-white enabled:border-accent">
+                            <i data-lucide="plus-circle" class="w-6 h-6 pointer-events-none"></i>
+                        </button>
+                    </header>
                     <form id="add-task-form" class="scrollable-content space-y-6">
-                        <div><label class="block text-sm font-medium text-text-secondary mb-2">Nombre</label><input name="title" required type="text" placeholder="Ej: Diseñar el prototipo de la app" class="w-full rounded-xl px-4 py-3 text-white placeholder-gray-500" /></div>
-                        <div><label class="block text-sm font-medium text-text-secondary mb-2">Descripción</label><textarea name="description" placeholder="Agrega detalles adicionales..." rows="3" class="w-full rounded-xl px-4 py-3 text-white placeholder-gray-500 resize-none"></textarea></div>
-                        <div><label class="block text-sm font-medium text-text-secondary mb-2">Prioridad</label><div id="priority-selector" class="flex justify-between gap-3"></div><input type="hidden" name="priority" value="medium"></div>
+                        <div>
+                            <label class="block text-sm font-medium text-text-secondary mb-2">Nombre</label>
+                            <input name="title" required type="text" placeholder="Ej: Diseñar el prototipo de la app" class="w-full rounded-xl px-4 py-3 placeholder-gray-500" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-text-secondary mb-2">Descripción</label>
+                            <textarea name="description" placeholder="Agrega detalles adicionales..." rows="3" class="w-full rounded-xl px-4 py-3 placeholder-gray-500 resize-none"></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-text-secondary mb-2">Prioridad</label>
+                            <div id="priority-selector" class="flex justify-between gap-3"></div>
+                            <input type="hidden" name="priority" value="medium">
+                        </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div><label class="block text-sm font-medium text-text-secondary mb-2">Categoría</label><select name="category" required class="w-full rounded-xl px-4 py-3 text-white"></select></div>
-                            <div><label class="block text-sm font-medium text-text-secondary mb-2">Tiempo (min)</label><input name="estimatedTime" type="number" value="30" required min="5" step="5" class="w-full rounded-xl px-4 py-3 text-white" /></div>
-                            <div><label class="block text-sm font-medium text-text-secondary mb-2">Fecha Límite</label><input name="dueDate" required type="date" class="w-full rounded-xl px-4 py-3 text-white" /></div>
-                            <div><label class="block text-sm font-medium text-text-secondary mb-2">Hora</label><input name="time" required type="time" class="w-full rounded-xl px-4 py-3 text-white" /></div>
+                            <div><label class="block text-sm font-medium text-text-secondary mb-2">Categoría</label><select name="category" required class="w-full rounded-xl px-4 py-3"></select></div>
+                            <div><label class="block text-sm font-medium text-text-secondary mb-2">Tiempo Estimado (min)</label><input name="estimatedTime" type="number" value="30" required min="5" step="5" class="w-full rounded-xl px-4 py-3" /></div>
+                            <div><label class="block text-sm font-medium text-text-secondary mb-2">Fecha Límite</label><input name="dueDate" required type="date" class="w-full rounded-xl px-4 py-3" /></div>
+                            <div><label class="block text-sm font-medium text-text-secondary mb-2">Hora Límite</label><input name="time" required type="time" class="w-full rounded-xl px-4 py-3" /></div>
+                        </div>
+                        <div class="border-t border-border pt-4 mt-4">
+                            <p class="text-sm font-medium text-text-secondary mb-2">Recordatorio (Opcional)</p>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div><label class="block text-xs font-medium text-text-secondary mb-1">Fecha Alarma</label><input name="alarmDate" type="date" class="w-full rounded-xl px-4 py-3 text-sm" /></div>
+                                <div><label class="block text-xs font-medium text-text-secondary mb-1">Hora Alarma</label><input name="alarmTimeInput" type="time" class="w-full rounded-xl px-4 py-3 text-sm" /></div>
+                            </div>
                         </div>
                     </form>
                 </section>
+
                 <section id="completed-screen" class="screen">
-                     <header class="mb-4 flex-shrink-0"><h1 class="text-2xl font-bold text-white">Tareas Completadas</h1><p id="completed-count-subtitle" class="text-text-secondary text-xs"></p></header>
+                     <header class="mb-4 flex-shrink-0">
+                        <h1 class="text-2xl font-bold text-white">Tareas Completadas</h1>
+                        <p id="completed-count-subtitle" class="text-text-secondary text-xs"></p>
+                    </header>
                     <div id="completed-task-list" class="scrollable-content space-y-3"></div>
                 </section>
             </main>
@@ -94,7 +166,7 @@
         <div id="settings-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
             <div class="bg-surface rounded-2xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col border border-border shadow-2xl">
                 <header class="p-4 border-b border-border flex items-center justify-between flex-shrink-0"><h2 class="text-lg font-bold text-white">Gestionar Categorías</h2><button data-action="close-settings" class="p-2 hover:bg-border rounded-full transition-colors"><i data-lucide="x" class="w-5 h-5 text-text-secondary pointer-events-none"></i></button></header>
-                <div class="p-4 flex-shrink-0"><form id="add-category-form" class="flex gap-2"><input name="categoryName" type="text" placeholder="Nueva categoría" required class="flex-1 rounded-lg px-4 py-3 text-white placeholder-gray-500" /><button type="submit" class="bg-accent hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"><i data-lucide="plus" class="w-5 h-5 pointer-events-none"></i></button></form></div>
+                <div class="p-4 flex-shrink-0"><form id="add-category-form" class="flex gap-2"><input name="categoryName" type="text" placeholder="Nueva categoría" required class="flex-1 rounded-lg px-4 py-3 placeholder-gray-500" /><button type="submit" class="bg-accent hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"><i data-lucide="plus" class="w-5 h-5 pointer-events-none"></i></button></form></div>
                 <div id="category-management-list" class="p-4 pt-0 space-y-2 overflow-y-auto"></div>
             </div>
         </div>
@@ -103,106 +175,158 @@
     <script>
     (() => {
         'use strict';
-        // Claves para localStorage
-        const TASKS_STORAGE_KEY = 'gestor_tasks_v2.1'; // Incrementa versión si cambias estructura de datos
-        const CATEGORIES_STORAGE_KEY = 'gestor_categories_v2.1';
+        const TASKS_STORAGE_KEY = 'gestor_tasks_v3.1'; 
+        const CATEGORIES_STORAGE_KEY = 'gestor_categories_v3.1';
 
-        let state = { 
-            tasks: [], 
-            categories: ['Personal', 'Trabajo', 'Hogar', 'Estudios'], 
-            activeScreen: 'pending-screen', 
-            activeCategory: 'Todas', 
-            searchTerm: '' 
+        let state = {
+            tasks: [],
+            categories: ['Personal', 'Trabajo', 'Hogar', 'Estudios'],
+            activeScreen: 'pending-screen',
+            activeCategory: 'Todas',
+            searchTerm: '',
+            editingTaskId: null,
+            activeSort: 'createdAt', 
+            activePriorityFilter: 'Todas'
         };
 
         const dom = {
-            appContainer: document.getElementById('app-container'), screens: document.querySelectorAll('.screen'), topNav: document.getElementById('top-nav'),
-            taskList: document.getElementById('task-list'), completedTaskList: document.getElementById('completed-task-list'),
-            categoryTabs: document.getElementById('category-tabs'), addTaskForm: document.getElementById('add-task-form'),
-            searchInput: document.getElementById('search-input'), settingsModal: document.getElementById('settings-modal'),
-            addCategoryForm: document.getElementById('add-category-form'), categoryManagementList: document.getElementById('category-management-list'),
-            prioritySelector: document.getElementById('priority-selector'), pendingCountSubtitle: document.getElementById('pending-count-subtitle'),
+            appContainer: document.getElementById('app-container'),
+            screens: document.querySelectorAll('.screen'),
+            topNav: document.getElementById('top-nav'),
+            taskList: document.getElementById('task-list'),
+            completedTaskList: document.getElementById('completed-task-list'),
+            categoryTabs: document.getElementById('category-tabs'),
+            addTaskForm: document.getElementById('add-task-form'),
+            searchInput: document.getElementById('search-input'),
+            settingsModal: document.getElementById('settings-modal'),
+            addCategoryForm: document.getElementById('add-category-form'),
+            categoryManagementList: document.getElementById('category-management-list'),
+            prioritySelector: document.getElementById('priority-selector'),
+            pendingCountSubtitle: document.getElementById('pending-count-subtitle'),
             completedCountSubtitle: document.getElementById('completed-count-subtitle'),
             submitTaskButton: document.getElementById('submit-task-button'),
+            filterMenu: document.getElementById('filter-menu'), 
+            addTaskScreenTitle: document.querySelector('#add-task-screen h1.text-2xl')
         };
 
-        const saveState = () => { 
+        const saveState = () => {
             try {
-                localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(state.tasks)); 
-                localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(state.categories)); 
-            } catch (e) { 
-                console.error("Error al guardar estado en localStorage:", e); 
-                 // Podrías notificar al usuario aquí si el localStorage está lleno o no disponible
+                localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(state.tasks));
+                localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(state.categories));
+            } catch (e) {
+                console.error("Error al guardar estado en localStorage:", e);
             }
         };
 
-        const loadState = () => { 
-            try { 
+        const loadState = () => {
+            try {
                 const storedTasks = localStorage.getItem(TASKS_STORAGE_KEY);
                 const storedCategories = localStorage.getItem(CATEGORIES_STORAGE_KEY);
                 
-                state.tasks = storedTasks ? JSON.parse(storedTasks) : []; 
+                state.tasks = storedTasks ? JSON.parse(storedTasks) : [];
                 state.categories = storedCategories ? JSON.parse(storedCategories) : ['Personal', 'Trabajo', 'Hogar', 'Estudios'];
-                if (!state.categories || state.categories.length === 0) { // Asegurar que siempre haya categorías
+                if (!state.categories || state.categories.length === 0) {
                     state.categories = ['Personal', 'Trabajo', 'Hogar', 'Estudios'];
                 }
-
-            } catch (e) { 
-                console.error("Error al cargar estado desde localStorage:", e); 
-                // Reset a valores por defecto si hay error de parseo
-                state.tasks = []; 
-                state.categories = ['Personal', 'Trabajo', 'Hogar', 'Estudios']; 
+            } catch (e) {
+                console.error("Error al cargar estado desde localStorage:", e);
+                state.tasks = [];
+                state.categories = ['Personal', 'Trabajo', 'Hogar', 'Estudios'];
             }
         };
 
-        // Renderizado general, ahora incluye la llamada a lucide.createIcons()
-        const render = () => { 
-            renderTasks(); 
-            renderCategories(); 
+        const render = () => {
+            renderTasks();
+            renderCategories();
+            renderActiveFiltersAndSort();
             if (typeof lucide !== 'undefined') {
-                lucide.createIcons(); 
+                lucide.createIcons();
             } else {
-                console.warn('Lucide no está definido. Los iconos no se renderizarán.');
+                console.warn('Lucide no está definido.');
             }
         };
+        
+        const priorityLabels = { 'high': 'Alta', 'medium': 'Media', 'low': 'Baja' };
+        
+        const getPriorityStyling = (p) => ({
+            'high': 'text-red-400 bg-red-400/10 border-red-400/20',
+            'medium': 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
+            'low': 'text-green-400 bg-green-400/10 border-green-400/20'
+        }[p] || 'text-gray-400 bg-gray-400/10 border-gray-400/20');
 
+        const formatTime = (m) => {
+            if (isNaN(parseInt(m))) return 'N/A';
+            const minutes = parseInt(m);
+            if (minutes < 0) return 'N/A';
+            if (minutes < 60) return `${minutes}m`;
+            return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+        };
+        
         const renderTasks = () => {
-            const getPriorityStyling = (p) => ({'high':'text-red-400 bg-red-400/10 border-red-400/20','medium':'text-yellow-400 bg-yellow-400/10 border-yellow-400/20','low':'text-green-400 bg-green-400/10 border-green-400/20'}[p] || 'text-gray-400 bg-gray-400/10 border-gray-400/20');
-            const formatTime = (m) => {
-                if (isNaN(parseInt(m))) return 'N/A';
-                const minutes = parseInt(m);
-                return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
-            }
-            const filtered = state.tasks.filter(t => 
+            const priorityOrderMap = { 'high': 1, 'medium': 2, 'low': 3, 'default': 4 };
+
+            const filteredByCategoryAndSearch = state.tasks.filter(t =>
                 (state.activeCategory === 'Todas' || t.category === state.activeCategory) &&
                 (t.title.toLowerCase().includes(state.searchTerm) || (t.description && t.description.toLowerCase().includes(state.searchTerm)))
             );
-            const pendingTasks = filtered.filter(t => t.status === 'pending').sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt)); // Ordenar por creación
-            const completedTasks = state.tasks.filter(t => t.status === 'completed').sort((a,b) => new Date(b.completedAt) - new Date(a.completedAt)); // Ordenar por completado (más reciente primero)
+
+            const filteredByPriority = state.activePriorityFilter === 'Todas'
+                ? filteredByCategoryAndSearch
+                : filteredByCategoryAndSearch.filter(t => t.priority === state.activePriorityFilter);
+
+            const pendingTasksRaw = filteredByPriority.filter(t => t.status === 'pending');
+            
+            let pendingTasks = [...pendingTasksRaw];
+            switch (state.activeSort) {
+                case 'createdAt': 
+                    pendingTasks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                    break;
+                case 'dueDate':
+                    pendingTasks.sort((a, b) => {
+                        const timeA = a.time ? a.time : '00:00';
+                        const timeB = b.time ? b.time : '00:00';
+                        const dateA = a.dueDate ? new Date(`${a.dueDate}T${timeA}`) : new Date(8640000000000000);
+                        const dateB = b.dueDate ? new Date(`${b.dueDate}T${timeB}`) : new Date(8640000000000000);
+                        return dateA - dateB;
+                    });
+                    break;
+                case 'priorityOrder':
+                    pendingTasks.sort((a, b) => (priorityOrderMap[a.priority] || priorityOrderMap.default) - (priorityOrderMap[b.priority] || priorityOrderMap.default));
+                    break;
+                case 'title':
+                    pendingTasks.sort((a, b) => a.title.localeCompare(b.title));
+                    break;
+            }
+
+            const completedTasks = state.tasks.filter(t => t.status === 'completed').sort((a,b) => new Date(b.completedAt) - new Date(a.completedAt));
             
             dom.pendingCountSubtitle.textContent = `${pendingTasks.length} ${pendingTasks.length === 1 ? 'tarea' : 'tareas'}`;
             dom.completedCountSubtitle.textContent = `${completedTasks.length} ${completedTasks.length === 1 ? 'tarea realizada' : 'tareas realizadas'}`;
             
             const taskHTML = (t) => `<div class="bg-surface rounded-2xl p-4 border border-border">
-                <div class="flex items-start gap-4">
+                <div class="flex items-start gap-3">
                     <button data-action="complete-task" data-id="${t.id}" class="mt-1 p-2 bg-green-500/20 hover:bg-green-500 text-green-400 hover:text-white rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-green-500">
                         <i data-lucide="check" class="w-5 h-5 pointer-events-none"></i>
                     </button>
                     <div class="flex-1 min-w-0">
                         <h3 class="font-semibold text-white mb-1 text-base">${t.title}</h3>
                         ${t.description ? `<p class="text-text-secondary text-sm mb-3 line-clamp-2">${t.description}</p>` : ''}
-                        <div class="flex flex-wrap gap-2 items-center">
-                            <span class="px-2 py-1 rounded-md text-xs font-semibold border ${getPriorityStyling(t.priority)}">${t.priority.charAt(0).toUpperCase() + t.priority.slice(1)}</span>
-                            <span class="text-text-secondary text-xs bg-gray-700/50 px-2 py-1 rounded-md">${t.category}</span>
-                            <div class="flex items-center text-text-secondary text-xs">
-                                <i data-lucide="clock" class="w-3 h-3 mr-1.5"></i>${formatTime(t.estimatedTime)}
-                            </div>
-                            ${t.dueDate ? `<div class="flex items-center text-text-secondary text-xs"><i data-lucide="calendar" class="w-3 h-3 mr-1.5"></i>${new Date(t.dueDate+'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} ${t.time || ''}</div>` : ''}
+                        <div class="flex flex-wrap gap-x-3 gap-y-1.5 items-center text-xs">
+                            <span class="px-2 py-1 rounded-md font-semibold border ${getPriorityStyling(t.priority)}">${priorityLabels[t.priority] || (t.priority.charAt(0).toUpperCase() + t.priority.slice(1))}</span>
+                            <span class="text-text-secondary bg-gray-700/50 px-2 py-1 rounded-md">${t.category}</span>
+                            <div class="flex items-center text-text-secondary"><i data-lucide="clock-3" class="w-3 h-3 mr-1"></i>${formatTime(t.estimatedTime)}</div>
+                            ${t.dueDate ? `<div class="flex items-center text-text-secondary"><i data-lucide="calendar-days" class="w-3 h-3 mr-1"></i>${new Date(t.dueDate+'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} ${t.time || ''}</div>` : ''}
+                            ${t.alarmDateTime ? `<div class="flex items-center text-blue-400"><i data-lucide="alarm-clock" class="w-3 h-3 mr-1"></i>${new Date(t.alarmDateTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit'})}</div>` : ''}
                         </div>
                     </div>
-                    <button data-action="delete-task" data-id="${t.id}" class="mt-1 p-2 bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-500">
-                        <i data-lucide="trash-2" class="w-5 h-5 pointer-events-none"></i>
-                    </button>
+                    <div class="flex flex-col gap-2 flex-shrink-0 mt-1">
+                        <button data-action="edit-task" data-id="${t.id}" class="p-2 bg-blue-500/20 hover:bg-blue-500 text-blue-400 hover:text-white rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <i data-lucide="edit-3" class="w-4 h-4 pointer-events-none"></i>
+                        </button>
+                        <button data-action="delete-task" data-id="${t.id}" class="p-2 bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-500">
+                            <i data-lucide="trash-2" class="w-4 h-4 pointer-events-none"></i>
+                        </button>
+                    </div>
                 </div>
             </div>`;
             
@@ -221,10 +345,10 @@
             
             const emptyStateHTML = (icon, title, subtitle) => `<div class="text-center pt-12"><div class="w-16 h-16 bg-surface rounded-full flex items-center justify-center mx-auto mb-4"><i data-lucide="${icon}" class="w-8 h-8 text-gray-500"></i></div><h3 class="text-lg font-semibold text-text-primary mb-2">${title}</h3><p class="text-text-secondary text-sm">${subtitle}</p></div>`;
             
-            dom.taskList.innerHTML = pendingTasks.length > 0 ? pendingTasks.map(taskHTML).join('') : emptyStateHTML('check-check', '¡Todo listo!', 'No hay tareas pendientes.');
+            dom.taskList.innerHTML = pendingTasks.length > 0 ? pendingTasks.map(taskHTML).join('') : emptyStateHTML('coffee', '¡Todo listo!', 'No hay tareas pendientes según los filtros actuales.');
             dom.completedTaskList.innerHTML = completedTasks.length > 0 ? completedTasks.map(completedTaskHTML).join('') : emptyStateHTML('archive', 'Aún no hay logros', 'Completa una tarea para verla aquí.');
         };
-
+        
         const renderCategories = () => {
             const categoriesToDisplay = ['Todas', ...state.categories];
             dom.categoryTabs.innerHTML = categoriesToDisplay.map(c => `<button data-action="filter-category" data-category="${c}" class="px-4 py-2 rounded-full font-medium transition-all duration-200 whitespace-nowrap flex-shrink-0 text-sm ${state.activeCategory === c ? 'bg-accent text-white shadow-lg shadow-blue-500/25' : 'bg-surface text-gray-300 border border-border'}">${c}</button>`).join('');
@@ -232,17 +356,33 @@
             const categorySelect = dom.addTaskForm.querySelector('select[name="category"]');
             if (categorySelect) {
                  categorySelect.innerHTML = state.categories.map(c => `<option value="${c}">${c}</option>`).join('');
-                 if(state.categories.length > 0 && !categorySelect.value) { // si no hay valor seleccionado y hay categorias, seleccionar la primera
+                 if(state.categories.length > 0 && !categorySelect.value) {
                     categorySelect.value = state.categories[0];
                  }
             }
 
-            dom.categoryManagementList.innerHTML = state.categories.map(c => `<div class="flex items-center justify-between bg-background rounded-lg p-3"><span class="text-white font-medium">${c}</span>${state.categories.length > 1 ? `<button data-action="delete-category" data-category="${c}" class="text-red-500 hover:text-red-400 p-1 rounded transition-colors"><i data-lucide="trash-2" class="w-4 h-4 pointer-events-none"></i></button>` : ''}</div>`).join('');
+            dom.categoryManagementList.innerHTML = state.categories.map(c => `<div class="flex items-center justify-between bg-background rounded-lg p-3"><span class="font-medium text-white">${c}</span>${state.categories.length > 1 ? `<button data-action="delete-category" data-category="${c}" class="text-red-500 hover:text-red-400 p-1 rounded transition-colors"><i data-lucide="trash-2" class="w-4 h-4 pointer-events-none"></i></button>` : ''}</div>`).join('');
         };
 
         const renderPrioritySelector = () => {
-            const getPriorityStyling = (p) => ({'high': {shadow: 'rgba(239, 68, 68, 0.4)' },'medium': {shadow: 'rgba(234, 179, 8, 0.4)' },'low': {shadow: 'rgba(34, 197, 94, 0.4)' }}[p]);
-            dom.prioritySelector.innerHTML = [{ id: 'high', label: 'Alta', icon: 'flame' },{ id: 'medium', label: 'Media', icon: 'bar-chart-2' },{ id: 'low', label: 'Baja', icon: 'chevrons-down' }].map(({id, label, icon}) => `<button type="button" data-action="select-priority" data-priority="${id}" class="priority-button flex-1 py-3 px-2 rounded-xl flex flex-col items-center gap-1.5 border transition-all duration-200 border-border text-text-secondary bg-surface" style="--shadow-color: ${getPriorityStyling(id).shadow}"><i data-lucide="${icon}" class="w-5 h-5 pointer-events-none"></i><span class="text-xs font-semibold pointer-events-none">${label}</span></button>`).join('');
+            const priorityDetails = {
+                'high': { shadow: 'var(--shadow-color-high)' },
+                'medium': { shadow: 'var(--shadow-color-medium)' },
+                'low': { shadow: 'var(--shadow-color-low)' }
+            };
+            dom.prioritySelector.innerHTML = [
+                { id: 'high', label: 'Alta', icon: 'flame' },
+                { id: 'medium', label: 'Media', icon: 'bar-chart-2' },
+                { id: 'low', label: 'Baja', icon: 'chevrons-down' }
+            ].map(({id, label, icon}) => 
+                `<button type="button" data-action="select-priority" data-priority="${id}" 
+                         class="priority-button flex-1 py-3 px-2 rounded-xl flex flex-col items-center gap-1.5 border 
+                                transition-all duration-200 border-border text-text-secondary bg-surface" 
+                         style="--shadow-color: ${priorityDetails[id].shadow};">
+                    <i data-lucide="${icon}" class="w-5 h-5 pointer-events-none"></i>
+                    <span class="text-xs font-semibold pointer-events-none">${label}</span>
+                </button>`
+            ).join('');
             updatePrioritySelection(dom.addTaskForm.querySelector('input[name="priority"]').value || 'medium');
         };
 
@@ -252,63 +392,81 @@
                 const btnPriority = btn.dataset.priority;
                 const isActive = btnPriority === priority;
                 btn.classList.toggle('active', isActive);
-                // Clases específicas de color del borde y texto para el botón activo
                 btn.classList.toggle('border-red-500', isActive && btnPriority === 'high');
                 btn.classList.toggle('text-red-300', isActive && btnPriority === 'high');
+                btn.style.setProperty('--shadow-color', isActive ? `var(--shadow-color-${btnPriority})` : 'rgba(255,255,255,0.1)');
+
+
                 btn.classList.toggle('border-yellow-500', isActive && btnPriority === 'medium');
                 btn.classList.toggle('text-yellow-300', isActive && btnPriority === 'medium');
+                
                 btn.classList.toggle('border-green-500', isActive && btnPriority === 'low');
                 btn.classList.toggle('text-green-300', isActive && btnPriority === 'low');
-                // Quitar clases de otros si no están activas
+                
                 if (!isActive) {
                     ['border-red-500', 'text-red-300', 'border-yellow-500', 'text-yellow-300', 'border-green-500', 'text-green-300'].forEach(cls => btn.classList.remove(cls));
                 }
+            });
+        };
+        
+        const renderActiveFiltersAndSort = () => {
+            if (!dom.filterMenu) return;
+            dom.filterMenu.querySelectorAll('[data-action="sort-tasks"]').forEach(btn => {
+                btn.classList.toggle('active-sort', btn.dataset.sort === state.activeSort);
+            });
+            dom.filterMenu.querySelectorAll('[data-action="filter-priority"]').forEach(btn => {
+                btn.classList.toggle('active-priority-filter', btn.dataset.priorityFilter === state.activePriorityFilter);
             });
         };
 
         const handleAction = (e) => {
             const target = e.target.closest('[data-action]');
             if (!target) return;
-            const { action, id, category, priority, screen } = target.dataset;
+            const { action, id, category, priority, screen, sort } = target.dataset;
+            const priorityFilter = target.dataset.priorityFilter;
 
             switch(action) {
                 case 'navigate': 
-                    state.activeScreen = screen; 
-                    dom.screens.forEach(s => s.classList.toggle('active', s.id === screen)); 
-                    dom.topNav.querySelectorAll('.nav-button').forEach(b => b.classList.toggle('active', b.dataset.screen === screen)); 
-                    // Si navegamos a la pantalla de añadir tarea, reseteamos el selector de prioridad y fecha/hora por si acaso
+                    state.activeScreen = screen;
+                    dom.screens.forEach(s => s.classList.toggle('active', s.id === screen));
+                    dom.topNav.querySelectorAll('.nav-button').forEach(b => b.classList.toggle('active', b.dataset.screen === screen));
                     if (screen === 'add-task-screen') {
-                        setDefaultFormValues();
-                        updatePrioritySelection('medium'); 
+                        if (state.editingTaskId === null) { 
+                            dom.addTaskForm.reset();
+                            setDefaultFormValues();
+                            updatePrioritySelection('medium');
+                            if (dom.addTaskScreenTitle) dom.addTaskScreenTitle.textContent = 'Nueva Tarea';
+                            dom.submitTaskButton.innerHTML = '<i data-lucide="plus-circle" class="w-6 h-6 pointer-events-none"></i>';
+                        }
+                        if (typeof lucide !== 'undefined') lucide.createIcons();
                         dom.submitTaskButton.disabled = !dom.addTaskForm.checkValidity();
                     }
                     break;
                 case 'show-settings': dom.settingsModal.classList.remove('hidden'); break;
                 case 'close-settings': dom.settingsModal.classList.add('hidden'); break;
-                case 'filter-category': state.activeCategory = category; render(); break; // Solo render, lucide se llama dentro
+                case 'filter-category': state.activeCategory = category; render(); break;
                 case 'select-priority': updatePrioritySelection(priority); break;
                 case 'delete-category':
                     if (state.categories.length > 1) {
                         const oldCategory = category;
                         const newCategories = state.categories.filter(c => c !== oldCategory); 
-                        const fallbackCategory = newCategories.length > 0 ? newCategories[0] : 'General'; // Nueva categoría por defecto si se borra la única
+                        const fallbackCategory = newCategories.length > 0 ? newCategories[0] : 'General';
                         
                         state.tasks = state.tasks.map(t => t.category === oldCategory ? {...t, category: fallbackCategory} : t);
                         state.categories = newCategories;
-                        if (state.categories.length === 0) { // Si todas las categorías fueron borradas, añadir una por defecto.
+                        if (state.categories.length === 0) { 
                              state.categories.push('General');
-                             if(dom.addTaskForm.querySelector('select[name="category"]')) {
-                                dom.addTaskForm.querySelector('select[name="category"]').value = 'General';
+                             const categorySelect = dom.addTaskForm.querySelector('select[name="category"]');
+                             if(categorySelect) {
+                                categorySelect.value = 'General';
                              }
                         }
-
                         if (state.activeCategory === oldCategory) {
                              state.activeCategory = state.categories.includes(fallbackCategory) ? fallbackCategory : 'Todas';
                         }
                         saveState(); render();
                     } else {
-                        // Podrías mostrar una alerta de que no se puede borrar la última categoría
-                        console.warn("No se puede eliminar la última categoría.");
+                        alert("No se puede eliminar la última categoría.");
                     }
                     break;
                 case 'complete-task': 
@@ -319,27 +477,139 @@
                     state.tasks = state.tasks.filter(t => t.id != id); 
                     saveState(); render(); 
                     break;
+                case 'edit-task':
+                    state.editingTaskId = parseInt(id);
+                    const taskToEdit = state.tasks.find(t => t.id === state.editingTaskId);
+                    if (taskToEdit) {
+                        dom.addTaskForm.elements.title.value = taskToEdit.title;
+                        dom.addTaskForm.elements.description.value = taskToEdit.description || '';
+                        updatePrioritySelection(taskToEdit.priority);
+                        dom.addTaskForm.elements.category.value = taskToEdit.category;
+                        dom.addTaskForm.elements.estimatedTime.value = taskToEdit.estimatedTime || 30;
+                        dom.addTaskForm.elements.dueDate.value = taskToEdit.dueDate ? taskToEdit.dueDate.split('T')[0] : '';
+                        dom.addTaskForm.elements.time.value = taskToEdit.time || '';
+                        
+                        if (taskToEdit.alarmDateTime) {
+                            dom.addTaskForm.elements.alarmDate.value = taskToEdit.alarmDateTime.split('T')[0];
+                            dom.addTaskForm.elements.alarmTimeInput.value = taskToEdit.alarmDateTime.split('T')[1].substring(0, 5);
+                        } else {
+                            dom.addTaskForm.elements.alarmDate.value = '';
+                            dom.addTaskForm.elements.alarmTimeInput.value = '';
+                        }
+
+                        if(dom.addTaskScreenTitle) dom.addTaskScreenTitle.textContent = 'Modificar Tarea';
+                        dom.submitTaskButton.innerHTML = '<i data-lucide="save" class="w-6 h-6 pointer-events-none"></i>';
+                        if (typeof lucide !== 'undefined') lucide.createIcons();
+
+                        const addTaskScreenButton = dom.topNav.querySelector('[data-action="navigate"][data-screen="add-task-screen"]');
+                        if (addTaskScreenButton) addTaskScreenButton.click();
+                        
+                        dom.submitTaskButton.disabled = !dom.addTaskForm.checkValidity();
+                    }
+                    break;
+                case 'toggle-filter-menu':
+                    dom.filterMenu.classList.toggle('hidden');
+                    break;
+                case 'sort-tasks':
+                    state.activeSort = sort;
+                    dom.filterMenu.classList.add('hidden');
+                    render();
+                    break;
+                case 'filter-priority':
+                     state.activePriorityFilter = priorityFilter;
+                     dom.filterMenu.classList.add('hidden');
+                     render();
+                     break;
             }
         };
         
+        document.addEventListener('click', (e) => {
+            if (dom.filterMenu && !dom.filterMenu.classList.contains('hidden') && 
+                !dom.filterMenu.contains(e.target) && 
+                !e.target.closest('[data-action="toggle-filter-menu"]')) {
+                dom.filterMenu.classList.add('hidden');
+            }
+        });
+
         const setDefaultFormValues = () => {
             dom.addTaskForm.elements.dueDate.value = new Date().toISOString().split('T')[0];
             const now = new Date();
             const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const minutes = String(Math.ceil(now.getMinutes() / 5) * 5 % 60).padStart(2, '0'); // Redondear a los próximos 5 min
             dom.addTaskForm.elements.time.value = `${hours}:${minutes}`;
-            dom.addTaskForm.elements.estimatedTime.value = 30; // Valor por defecto para tiempo estimado
-            if(state.categories.length > 0 && dom.addTaskForm.elements.category) {
-                 dom.addTaskForm.elements.category.value = state.categories[0];
+            dom.addTaskForm.elements.estimatedTime.value = 30;
+            
+            const categorySelect = dom.addTaskForm.elements.category;
+            if(categorySelect && state.categories.length > 0) {
+                 categorySelect.value = state.categories[0];
             }
+            if (dom.addTaskForm.elements.alarmDate) dom.addTaskForm.elements.alarmDate.value = '';
+            if (dom.addTaskForm.elements.alarmTimeInput) dom.addTaskForm.elements.alarmTimeInput.value = '';
         };
+        
+        async function requestNotificationPermission() {
+            if (!('Notification' in window)) {
+                alert('Este navegador no soporta notificaciones.');
+                return false;
+            }
+            if (Notification.permission === 'granted') return true;
+            if (Notification.permission !== 'denied') {
+                const permission = await Notification.requestPermission();
+                return permission === 'granted';
+            }
+            return false;
+        }
+
+        function scheduleNotification(task) {
+            if (!task.alarmDateTime || task.status !== 'pending') return; // Solo programar para pendientes
+
+            requestNotificationPermission().then(granted => {
+                if (!granted) {
+                    console.warn('Permiso de notificación no concedido.');
+                    return;
+                }
+
+                const alarmTime = new Date(task.alarmDateTime).getTime();
+                const now = new Date().getTime();
+                const timeToAlarm = alarmTime - now;
+
+                if (timeToAlarm > 0) {
+                    console.log(`Programando notificación para "${task.title}" en ${timeToAlarm / 1000} segundos.`);
+                    setTimeout(() => {
+                        // Verificar si la tarea sigue pendiente antes de notificar
+                        const currentTaskState = state.tasks.find(t => t.id === task.id);
+                        if (currentTaskState && currentTaskState.status === 'pending') {
+                            try {
+                                if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                                    navigator.serviceWorker.controller.postMessage({
+                                        type: 'SCHEDULE_NOTIFICATION',
+                                        task: { title: task.title, id: task.id, description: task.description || 'Recordatorio de tarea', icon: './icon-192x192.png' }
+                                    });
+                                } else { 
+                                    const notification = new Notification(`Recordatorio: ${task.title}`, {
+                                        body: task.description || '¡Es hora de tu tarea!',
+                                        icon: './icon-192x192.png',
+                                        tag: `task-alarm-${task.id}` 
+                                    });
+                                    notification.onclick = () => { window.focus(); };
+                                }
+                            } catch (err) {
+                                console.error('Error al mostrar/enviar notificación:', err);
+                            }
+                        } else {
+                            console.log(`La tarea "${task.title}" ya no está pendiente. No se mostrará notificación.`);
+                        }
+                    }, timeToAlarm);
+                }
+            });
+        }
 
         const init = () => {
             loadState();
             setDefaultFormValues();
             
             document.body.addEventListener('click', handleAction);
-            dom.searchInput.addEventListener('input', (e) => { state.searchTerm = e.target.value.toLowerCase(); render(); }); // render() ahora llama a lucide
+            dom.searchInput.addEventListener('input', (e) => { state.searchTerm = e.target.value.toLowerCase(); render(); });
             
             dom.addCategoryForm.addEventListener('submit', (e) => { 
                 e.preventDefault(); 
@@ -348,53 +618,91 @@
                 if (newCategoryName && !state.categories.includes(newCategoryName)) { 
                     state.categories.push(newCategoryName); 
                     saveState(); 
-                    renderCategories(); // Solo renderizar categorías
-                    if (typeof lucide !== 'undefined') lucide.createIcons(); // Y luego los iconos
-                    e.target.reset(); 
+                    renderCategories(); 
+                    if (typeof lucide !== 'undefined') lucide.createIcons(); 
+                    newCategoryNameInput.value = ''; // Limpiar input explícitamente
                 } else if (state.categories.includes(newCategoryName)) {
-                    alert("Esa categoría ya existe."); // Feedback al usuario
+                    alert("Esa categoría ya existe."); 
+                    newCategoryNameInput.focus();
+                } else if (!newCategoryName) {
+                    alert("El nombre de la categoría no puede estar vacío.");
                     newCategoryNameInput.focus();
                 }
             });
             
             dom.addTaskForm.addEventListener('input', () => { dom.submitTaskButton.disabled = !dom.addTaskForm.checkValidity(); });
+            
             dom.addTaskForm.addEventListener('submit', (e) => {
-                e.preventDefault(); 
+                e.preventDefault();
                 if (!dom.addTaskForm.checkValidity()) {
-                    // Podrías añadir un feedback visual de campos inválidos
+                    alert("Por favor, completa todos los campos requeridos correctamente.");
                     return;
                 }
-                const formData = new FormData(e.target); 
-                const newTask = { 
-                    id: Date.now(), // Usar Date.now() es simple pero puede colisionar si se crean tareas muy rápido. Para apps más robustas, usar UUID.
-                    status: 'pending', 
-                    createdAt: new Date().toISOString() 
-                };
-                for (let [key, value] of formData.entries()) { 
-                    newTask[key] = value.trim(); // Trim para evitar espacios
+                const formData = new FormData(e.target);
+                const taskData = {}; 
+
+                for (let [key, value] of formData.entries()) {
+                    taskData[key] = typeof value === 'string' ? value.trim() : value;
                 }
-                // Convertir estimatedTime a número
-                if (newTask.estimatedTime) {
-                    newTask.estimatedTime = parseInt(newTask.estimatedTime, 10);
+                
+                if (taskData.alarmDate && taskData.alarmTimeInput) {
+                    taskData.alarmDateTime = `${taskData.alarmDate}T${taskData.alarmTimeInput}`;
+                } else { 
+                    taskData.alarmDateTime = null; 
+                }
+                delete taskData.alarmDate; 
+                delete taskData.alarmTimeInput;
+
+                if (taskData.estimatedTime) {
+                    taskData.estimatedTime = parseInt(taskData.estimatedTime, 10);
+                    if (isNaN(taskData.estimatedTime) || taskData.estimatedTime < 0) {
+                        taskData.estimatedTime = 0;
+                    }
                 }
 
-                state.tasks.push(newTask); 
-                saveState(); 
+                if (state.editingTaskId !== null) {
+                    const originalTask = state.tasks.find(t => t.id === state.editingTaskId);
+                    // Si la tarea editada tenía una alarma y ahora no, o viceversa, o cambió la hora
+                    // se debe "cancelar" la notificación antigua (difícil sin IDs de timeout)
+                    // y programar la nueva si aplica. Por simplicidad, se reprogramará.
+                    state.tasks = state.tasks.map(t =>
+                        t.id === state.editingTaskId ? { ...originalTask, ...taskData, id: state.editingTaskId, updatedAt: new Date().toISOString() } : t
+                    );
+                    state.editingTaskId = null; 
+                    if(dom.addTaskScreenTitle) dom.addTaskScreenTitle.textContent = 'Nueva Tarea';
+                    dom.submitTaskButton.innerHTML = '<i data-lucide="plus-circle" class="w-6 h-6 pointer-events-none"></i>';
+                } else {
+                    taskData.id = Date.now();
+                    taskData.status = 'pending';
+                    taskData.createdAt = new Date().toISOString();
+                    state.tasks.push(taskData);
+                }
+
+                saveState();
                 e.target.reset();
-                setDefaultFormValues(); // Resetear a valores por defecto después de enviar
-                dom.submitTaskButton.disabled = true; 
-                updatePrioritySelection('medium'); // Resetear prioridad visualmente
+                setDefaultFormValues();
+                dom.submitTaskButton.disabled = true;
+                updatePrioritySelection('medium');
+
+                const taskForNotification = state.tasks.find(t => t.id === (state.editingTaskId ?? taskData.id));
+                if (taskForNotification && taskForNotification.alarmDateTime && taskForNotification.status === 'pending') {
+                    scheduleNotification(taskForNotification);
+                }
                 
-                // Navegar a la pantalla de pendientes
-                const pendingScreenButton = document.querySelector('[data-action="navigate"][data-screen="pending-screen"]');
+                const pendingScreenButton = dom.topNav.querySelector('[data-action="navigate"][data-screen="pending-screen"]');
                 if (pendingScreenButton) pendingScreenButton.click();
                 
-                render(); // render() ahora llama a lucide
+                render(); // Esto llamará a lucide.createIcons()
             });
             
-            renderPrioritySelector(); 
-            render(); // Renderizado inicial
-             // Registrar Service Worker
+            renderPrioritySelector();
+            render(); 
+            
+            // Reprogramar notificaciones para tareas pendientes al cargar la app
+            state.tasks.filter(t => t.status === 'pending' && t.alarmDateTime).forEach(task => {
+                setTimeout(() => scheduleNotification(task), 1000);
+            });
+
             if ('serviceWorker' in navigator) {
                 window.addEventListener('load', () => {
                     navigator.serviceWorker.register('./sw.js')
