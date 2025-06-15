@@ -175,8 +175,14 @@
     <script>
     (() => {
         'use strict';
-        const TASKS_STORAGE_KEY = 'gestor_tasks_v3.1'; 
-        const CATEGORIES_STORAGE_KEY = 'gestor_categories_v3.1';
+        // Claves de localStorage - ACTUALES para esta versión
+        const CURRENT_TASKS_STORAGE_KEY = 'gestor_tasks_v3.1'; 
+        const CURRENT_CATEGORIES_STORAGE_KEY = 'gestor_categories_v3.1';
+
+        // Claves de localStorage - ANTIGUAS de la versión de la que se migrará
+        const OLD_TASKS_STORAGE_KEY = 'gestor_tasks_v2.1';
+        const OLD_CATEGORIES_STORAGE_KEY = 'gestor_categories_v2.1';
+
 
         let state = {
             tasks: [],
@@ -211,27 +217,84 @@
 
         const saveState = () => {
             try {
-                localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(state.tasks));
-                localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(state.categories));
+                localStorage.setItem(CURRENT_TASKS_STORAGE_KEY, JSON.stringify(state.tasks));
+                localStorage.setItem(CURRENT_CATEGORIES_STORAGE_KEY, JSON.stringify(state.categories));
             } catch (e) {
                 console.error("Error al guardar estado en localStorage:", e);
             }
         };
-
-        const loadState = () => {
+        
+        const migrateOldData = () => {
+            let migrationPerformed = false;
             try {
-                const storedTasks = localStorage.getItem(TASKS_STORAGE_KEY);
-                const storedCategories = localStorage.getItem(CATEGORIES_STORAGE_KEY);
-                
-                state.tasks = storedTasks ? JSON.parse(storedTasks) : [];
-                state.categories = storedCategories ? JSON.parse(storedCategories) : ['Personal', 'Trabajo', 'Hogar', 'Estudios'];
-                if (!state.categories || state.categories.length === 0) {
-                    state.categories = ['Personal', 'Trabajo', 'Hogar', 'Estudios'];
+                const oldTasksData = localStorage.getItem(OLD_TASKS_STORAGE_KEY);
+                if (oldTasksData) {
+                    console.log('Migrando tareas de la versión antigua...');
+                    const parsedOldTasks = JSON.parse(oldTasksData);
+                    // Simple asignación, si la estructura es compatible. 
+                    // Si la estructura cambió, aquí se necesitaría transformar los datos.
+                    state.tasks = parsedOldTasks; 
+                    localStorage.setItem(CURRENT_TASKS_STORAGE_KEY, JSON.stringify(state.tasks)); // Guardar en la nueva clave
+                    localStorage.removeItem(OLD_TASKS_STORAGE_KEY); // Eliminar la clave antigua
+                    migrationPerformed = true;
+                    console.log('Tareas migradas exitosamente.');
+                }
+
+                const oldCategoriesData = localStorage.getItem(OLD_CATEGORIES_STORAGE_KEY);
+                if (oldCategoriesData) {
+                    console.log('Migrando categorías de la versión antigua...');
+                    const parsedOldCategories = JSON.parse(oldCategoriesData);
+                    if (parsedOldCategories && parsedOldCategories.length > 0) {
+                        state.categories = parsedOldCategories;
+                    }
+                    // Si no hay categorías antiguas o están vacías, se usarán las por defecto o las ya cargadas en state.categories
+                    localStorage.setItem(CURRENT_CATEGORIES_STORAGE_KEY, JSON.stringify(state.categories));
+                    localStorage.removeItem(OLD_CATEGORIES_STORAGE_KEY);
+                    migrationPerformed = true;
+                    console.log('Categorías migradas exitosamente.');
                 }
             } catch (e) {
-                console.error("Error al cargar estado desde localStorage:", e);
-                state.tasks = [];
+                console.error("Error durante la migración de datos:", e);
+            }
+            return migrationPerformed;
+        };
+
+
+        const loadState = () => {
+            // Intentar migrar solo si no existen datos en las claves actuales
+            const currentTasksExist = localStorage.getItem(CURRENT_TASKS_STORAGE_KEY);
+            const currentCategoriesExist = localStorage.getItem(CURRENT_CATEGORIES_STORAGE_KEY);
+            let migrated = false;
+
+            if (!currentTasksExist && !currentCategoriesExist) {
+                migrated = migrateOldData(); // migrateOldData ahora actualiza state.tasks y state.categories directamente si migra
+            }
+
+            // Si no se realizó una migración (porque no había datos antiguos o ya existían los nuevos),
+            // entonces cargar desde las claves actuales.
+            if (!migrated) {
+                try {
+                    const storedTasks = localStorage.getItem(CURRENT_TASKS_STORAGE_KEY);
+                    const storedCategories = localStorage.getItem(CURRENT_CATEGORIES_STORAGE_KEY);
+
+                    state.tasks = storedTasks ? JSON.parse(storedTasks) : [];
+                    
+                    const parsedStoredCategories = storedCategories ? JSON.parse(storedCategories) : null;
+                    state.categories = (parsedStoredCategories && parsedStoredCategories.length > 0) 
+                                        ? parsedStoredCategories 
+                                        : ['Personal', 'Trabajo', 'Hogar', 'Estudios'];
+                } catch (e) {
+                    console.error("Error al cargar estado desde localStorage (claves actuales):", e);
+                    state.tasks = [];
+                    state.categories = ['Personal', 'Trabajo', 'Hogar', 'Estudios'];
+                }
+            }
+            // Asegurar que siempre haya categorías, incluso después de la migración o carga
+            if (!state.categories || state.categories.length === 0) {
                 state.categories = ['Personal', 'Trabajo', 'Hogar', 'Estudios'];
+                 if(!currentCategoriesExist && !migrated) { // Solo guardar las default si realmente no había nada
+                    saveState(); // Guardar las categorías por defecto si se acaban de establecer
+                 }
             }
         };
 
@@ -356,8 +419,10 @@
             const categorySelect = dom.addTaskForm.querySelector('select[name="category"]');
             if (categorySelect) {
                  categorySelect.innerHTML = state.categories.map(c => `<option value="${c}">${c}</option>`).join('');
-                 if(state.categories.length > 0 && !categorySelect.value) {
+                 if(state.categories.length > 0 && (!categorySelect.value || !state.categories.includes(categorySelect.value))) { // Si no hay valor o el valor no es una categoría válida
                     categorySelect.value = state.categories[0];
+                 } else if (state.categories.length === 0) {
+                    categorySelect.innerHTML = '<option value="">Sin categorías</option>'; // Opcional: placeholder si no hay categorías
                  }
             }
 
@@ -394,7 +459,8 @@
                 btn.classList.toggle('active', isActive);
                 btn.classList.toggle('border-red-500', isActive && btnPriority === 'high');
                 btn.classList.toggle('text-red-300', isActive && btnPriority === 'high');
-                btn.style.setProperty('--shadow-color', isActive ? `var(--shadow-color-${btnPriority})` : 'rgba(255,255,255,0.1)');
+                // Asegurar que la variable CSS se establezca correctamente
+                btn.style.setProperty('--shadow-color', isActive ? `var(--shadow-color-${btnPriority})` : 'rgba(107, 114, 128, 0.1)');
 
 
                 btn.classList.toggle('border-yellow-500', isActive && btnPriority === 'medium');
@@ -454,7 +520,7 @@
                         
                         state.tasks = state.tasks.map(t => t.category === oldCategory ? {...t, category: fallbackCategory} : t);
                         state.categories = newCategories;
-                        if (state.categories.length === 0) { 
+                        if (state.categories.length === 0) { // Esto no debería ocurrir si validamos state.categories.length > 1
                              state.categories.push('General');
                              const categorySelect = dom.addTaskForm.querySelector('select[name="category"]');
                              if(categorySelect) {
@@ -534,9 +600,16 @@
         const setDefaultFormValues = () => {
             dom.addTaskForm.elements.dueDate.value = new Date().toISOString().split('T')[0];
             const now = new Date();
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(Math.ceil(now.getMinutes() / 5) * 5 % 60).padStart(2, '0'); // Redondear a los próximos 5 min
-            dom.addTaskForm.elements.time.value = `${hours}:${minutes}`;
+            let hours = now.getHours();
+            let minutes = now.getMinutes();
+            // Redondear minutos al siguiente múltiplo de 5
+            minutes = Math.ceil(minutes / 5) * 5;
+            if (minutes >= 60) {
+                minutes = 0;
+                hours = (hours + 1) % 24;
+            }
+            dom.addTaskForm.elements.time.value = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+            
             dom.addTaskForm.elements.estimatedTime.value = 30;
             
             const categorySelect = dom.addTaskForm.elements.category;
@@ -561,7 +634,7 @@
         }
 
         function scheduleNotification(task) {
-            if (!task.alarmDateTime || task.status !== 'pending') return; // Solo programar para pendientes
+            if (!task.alarmDateTime || task.status !== 'pending') return;
 
             requestNotificationPermission().then(granted => {
                 if (!granted) {
@@ -576,7 +649,6 @@
                 if (timeToAlarm > 0) {
                     console.log(`Programando notificación para "${task.title}" en ${timeToAlarm / 1000} segundos.`);
                     setTimeout(() => {
-                        // Verificar si la tarea sigue pendiente antes de notificar
                         const currentTaskState = state.tasks.find(t => t.id === task.id);
                         if (currentTaskState && currentTaskState.status === 'pending') {
                             try {
@@ -585,6 +657,7 @@
                                         type: 'SCHEDULE_NOTIFICATION',
                                         task: { title: task.title, id: task.id, description: task.description || 'Recordatorio de tarea', icon: './icon-192x192.png' }
                                     });
+                                     console.log('Mensaje de notificación enviado al Service Worker.');
                                 } else { 
                                     const notification = new Notification(`Recordatorio: ${task.title}`, {
                                         body: task.description || '¡Es hora de tu tarea!',
@@ -592,6 +665,7 @@
                                         tag: `task-alarm-${task.id}` 
                                     });
                                     notification.onclick = () => { window.focus(); };
+                                    console.log('Notificación local mostrada (fallback).');
                                 }
                             } catch (err) {
                                 console.error('Error al mostrar/enviar notificación:', err);
@@ -600,12 +674,14 @@
                             console.log(`La tarea "${task.title}" ya no está pendiente. No se mostrará notificación.`);
                         }
                     }, timeToAlarm);
+                } else {
+                     console.log(`La hora de alarma para "${task.title}" ya pasó o es inválida.`);
                 }
             });
         }
 
         const init = () => {
-            loadState();
+            loadState(); // Carga o migra datos primero
             setDefaultFormValues();
             
             document.body.addEventListener('click', handleAction);
@@ -620,7 +696,7 @@
                     saveState(); 
                     renderCategories(); 
                     if (typeof lucide !== 'undefined') lucide.createIcons(); 
-                    newCategoryNameInput.value = ''; // Limpiar input explícitamente
+                    newCategoryNameInput.value = ''; 
                 } else if (state.categories.includes(newCategoryName)) {
                     alert("Esa categoría ya existe."); 
                     newCategoryNameInput.focus();
@@ -660,14 +736,13 @@
                     }
                 }
 
+                let taskForNotification;
+
                 if (state.editingTaskId !== null) {
                     const originalTask = state.tasks.find(t => t.id === state.editingTaskId);
-                    // Si la tarea editada tenía una alarma y ahora no, o viceversa, o cambió la hora
-                    // se debe "cancelar" la notificación antigua (difícil sin IDs de timeout)
-                    // y programar la nueva si aplica. Por simplicidad, se reprogramará.
-                    state.tasks = state.tasks.map(t =>
-                        t.id === state.editingTaskId ? { ...originalTask, ...taskData, id: state.editingTaskId, updatedAt: new Date().toISOString() } : t
-                    );
+                    const updatedTask = { ...originalTask, ...taskData, id: state.editingTaskId, updatedAt: new Date().toISOString() };
+                    state.tasks = state.tasks.map(t => t.id === state.editingTaskId ? updatedTask : t );
+                    taskToNotify = updatedTask; // La tarea que podría necesitar (re)programar notificación
                     state.editingTaskId = null; 
                     if(dom.addTaskScreenTitle) dom.addTaskScreenTitle.textContent = 'Nueva Tarea';
                     dom.submitTaskButton.innerHTML = '<i data-lucide="plus-circle" class="w-6 h-6 pointer-events-none"></i>';
@@ -676,6 +751,7 @@
                     taskData.status = 'pending';
                     taskData.createdAt = new Date().toISOString();
                     state.tasks.push(taskData);
+                    taskToNotify = taskData; // La nueva tarea
                 }
 
                 saveState();
@@ -684,21 +760,19 @@
                 dom.submitTaskButton.disabled = true;
                 updatePrioritySelection('medium');
 
-                const taskForNotification = state.tasks.find(t => t.id === (state.editingTaskId ?? taskData.id));
-                if (taskForNotification && taskForNotification.alarmDateTime && taskForNotification.status === 'pending') {
-                    scheduleNotification(taskForNotification);
+                if (taskToNotify && taskToNotify.alarmDateTime && taskToNotify.status === 'pending') {
+                    scheduleNotification(taskToNotify);
                 }
                 
                 const pendingScreenButton = dom.topNav.querySelector('[data-action="navigate"][data-screen="pending-screen"]');
                 if (pendingScreenButton) pendingScreenButton.click();
                 
-                render(); // Esto llamará a lucide.createIcons()
+                render();
             });
             
             renderPrioritySelector();
             render(); 
             
-            // Reprogramar notificaciones para tareas pendientes al cargar la app
             state.tasks.filter(t => t.status === 'pending' && t.alarmDateTime).forEach(task => {
                 setTimeout(() => scheduleNotification(task), 1000);
             });
